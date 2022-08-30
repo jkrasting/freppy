@@ -150,6 +150,11 @@ def infer_attributes(file_path, warn=False, **kwargs):
         gfdl_start_time = ""
         gfdl_end_time = ""
 
+    # Fix the path if average file was detected
+    if gfdl_pptype == "av":
+        file_path = file_path.replace("/monthly/", "/monthly_")
+        file_path = file_path.replace("/annual/", "/annual_")
+
     return (
         activity_id,
         institution_id,

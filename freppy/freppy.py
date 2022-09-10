@@ -2,11 +2,13 @@
 
 import datetime as dt
 import json
-import multiprocessing
+from multiprocessing.pool import ThreadPool
 import os
 from collections import OrderedDict
 
 import pandas as pd
+
+__all__ = ["get_nc_files", "parse_date_string", "infer_attributes", "catalog_from_dir"]
 
 
 def get_nc_files(base_dir):
@@ -26,6 +28,8 @@ def get_nc_files(base_dir):
 
 
 def parse_date_string(datestring):
+    """This function reads a frepp formatted date string"""
+
     dates = tuple(datestring.split("-"))
 
     # case of a single year string
@@ -92,6 +96,8 @@ def parse_date_string(datestring):
 
 
 def infer_attributes(file_path, warn=False, **kwargs):
+
+    """ Infers DRS attributes based on frepp path """
 
     file_path = file_path.replace("/monthly_", "/monthly/")
     file_path = file_path.replace("/annual_", "/annual/")
@@ -174,12 +180,13 @@ def infer_attributes(file_path, warn=False, **kwargs):
 
 
 def catalog_from_dir(base_dir, filename="catalog"):
+    """ Generates an intake-esm catalog for a frepp directory tree """
 
     subdirs = [f.path for f in os.scandir(base_dir) if f.is_dir()]
     # subdirs = [x for x in subdirs if "ice" in x]
 
     # Set up a multiprocessing thread pool
-    pool = multiprocessing.pool.ThreadPool()
+    pool = ThreadPool()
 
     # Run the multiprocessing pool
     file_list = pool.map(get_nc_files, subdirs)

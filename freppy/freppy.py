@@ -8,7 +8,14 @@ from collections import OrderedDict
 
 import pandas as pd
 
-__all__ = ["get_nc_files", "parse_date_string", "infer_attributes", "catalog_from_dir"]
+__all__ = [
+    "get_nc_files",
+    "parse_date_string",
+    "infer_attributes",
+    "catalog_from_dir",
+    "consolidate_monthly_av",
+    "infer_av_variables]",
+]
 
 
 def get_nc_files(base_dir):
@@ -97,7 +104,7 @@ def parse_date_string(datestring):
 
 def infer_attributes(file_path, warn=False, **kwargs):
 
-    """ Infers DRS attributes based on frepp path """
+    """Infers DRS attributes based on frepp path"""
 
     file_path = file_path.replace("/monthly_", "/monthly/")
     file_path = file_path.replace("/annual_", "/annual/")
@@ -179,8 +186,8 @@ def infer_attributes(file_path, warn=False, **kwargs):
     )
 
 
-def catalog_from_dir(base_dir, filename="catalog"):
-    """ Generates an intake-esm catalog for a frepp directory tree """
+def catalog_from_dir(base_dir, filename=None):
+    """Generates an intake-esm catalog for a frepp directory tree"""
 
     subdirs = [f.path for f in os.scandir(base_dir) if f.is_dir()]
     # subdirs = [x for x in subdirs if "ice" in x]
@@ -217,19 +224,90 @@ def catalog_from_dir(base_dir, filename="catalog"):
         ],
     )
 
-    df.to_csv(f"{filename}.csv")
+    if filename is not None:
+        df.to_csv(f"{filename}.csv")
 
-    descriptor = OrderedDict()
-    descriptor["esmcat_version"] = "0.1.0"
-    descriptor["id"] = f"{filename}"
-    descriptor["description"] = f"{base_dir}"
-    descriptor["catalog_file"] = f"{filename}.csv"
-    descriptor["attributes"] = [
-        {"column_name": x, "vocabulary": ""} for x in df.columns if x != "path"
-    ]
-    descriptor["assets"] = {"column_name": "path", "format": "netcdf"}
+        descriptor = OrderedDict()
+        descriptor["esmcat_version"] = "0.1.0"
+        descriptor["id"] = f"{filename}"
+        descriptor["description"] = f"{base_dir}"
+        descriptor["catalog_file"] = f"{filename}.csv"
+        descriptor["attributes"] = [
+            {"column_name": x, "vocabulary": ""} for x in df.columns if x != "path"
+        ]
+        descriptor["assets"] = {"column_name": "path", "format": "netcdf"}
 
-    with open(f"{filename}.json", "w") as json_file:
-        json.dump(descriptor, json_file, indent=2)
+        with open(f"{filename}.json", "w") as json_file:
+            json.dump(descriptor, json_file, indent=2)
 
     return df
+
+
+def consolidate_monthly_av(df):
+
+    """This function condenses all monthly avg files into a single entry for a given chunk"""
+
+    catalog = df.copy()
+
+    q = catalog.query(
+        "gfdl_pptype == 'av' & table_id == 'monthly' & variable_id != 'mon'"
+    )
+
+    while len(q) > 0:
+        prev_q_len = len(q)
+
+        stripped = q[
+            [
+                "gfdl_freq",
+                "gfdl_pptype",
+                "gfdl_component",
+                "gfdl_start_time",
+                "gfdl_end_time",
+            ]
+        ]
+        subset = stripped[(stripped == stripped.iloc[0])].dropna()
+        indices = list(subset.index)
+        pathlist = sorted(list(catalog.iloc[indices].path))
+        catalog.at[indices[0], "path"] = pathlist
+        catalog.at[indices[0], "variable_id"] = "mon"
+        catalog = catalog.drop(indices[1:])
+
+        q = catalog.query(
+            "gfdl_pptype == 'av' & table_id == 'monthly' & variable_id != 'mon'"
+        )
+
+        if len(q) == prev_q_len:
+            raise RuntimeError("Something unexpected happened")
+
+    return catalog
+
+
+def infer_av_variables(df):
+
+    """This function infers the variables inside the average files based on timeseries that are present"""
+
+    catalog = df.copy()
+
+    avgfiles = catalog.query("gfdl_pptype == 'av'")
+    complist = set(avgfiles["gfdl_component"])
+
+    vardict = {
+        k: set(
+            catalog[catalog["gfdl_component"] == k].query("gfdl_pptype == 'ts'")[
+                "variable_id"
+            ]
+        )
+        for k in complist
+    }
+
+    def _explode_entry(row, varlist):
+        return [{**dict(row), "variable_id": x} for x in varlist]
+
+    exploded = [
+        _explode_entry(row, vardict[row.gfdl_component])
+        for index, row in avgfiles.iterrows()
+    ]
+
+    return pd.concat(
+        [catalog, pd.DataFrame([item for sublist in exploded for item in sublist])]
+    )

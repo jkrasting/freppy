@@ -1,13 +1,31 @@
 import pytest
 import freppy
 
-base_dir = "/Users/krasting/PycharmProjects/freppy/pp"
-catalog = freppy.catalog_from_dir(base_dir)
+import pandas as pd
+import shutil
+import tempfile
+
+# base_dir = "/Users/krasting/PycharmProjects/freppy/pp"
 
 
-# -- below are some extreme test cases
-# base_dir = "/archive/jpk/fre/siena_201204/ESM2G/ESM2G-C2_1pct-co2_4x_U2/gfdl.nescc-default-prod-openmp/pp/"
-# base_dir = "/archive/jpk/fre/siena_201204/ESM2G/ESM2G_pi-control_C2/gfdl.nescc-default-prod-openmp/pp/"
+def test_functional_1():
+    df_catalog = freppy.catalog_from_dir(pytest.ppdir)
+    assert isinstance(df_catalog, pd.DataFrame)
+    assert len(df_catalog) == 2659
+
+
+def test_functional_2():
+    df_catalog = freppy.catalog_from_dir(pytest.ppdir)
+    consolidated = freppy.consolidate_monthly_av(df_catalog)
+    assert len(consolidated) == 2494
+
+
+def test_functional_3():
+    df_catalog = freppy.catalog_from_dir(pytest.ppdir)
+    consolidated = freppy.consolidate_monthly_av(df_catalog)
+    exploded = freppy.infer_av_variables(consolidated)
+    assert len(exploded) == 5968
+
 
 # testing
 # path_to_pp = dl.dora_metadata("odiv-210")["pathPP"] + "ocean_annual_z/"

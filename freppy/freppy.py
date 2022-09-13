@@ -186,7 +186,7 @@ def infer_attributes(file_path, warn=False, **kwargs):
     )
 
 
-def catalog_from_dir(base_dir, filename=None):
+def catalog_from_dir(base_dir, filename=None, process_monthly=True):
     """Generates an intake-esm catalog for a frepp directory tree"""
 
     subdirs = [f.path for f in os.scandir(base_dir) if f.is_dir()]
@@ -223,6 +223,10 @@ def catalog_from_dir(base_dir, filename=None):
             "path",
         ],
     )
+
+    if process_monthly:
+        df = consolidate_monthly_av(df)
+        df = infer_av_variables(df)
 
     if filename is not None:
         df.to_csv(f"{filename}.csv")
